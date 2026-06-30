@@ -93,6 +93,16 @@ export class ProjectManager {
   }
 
   /**
+   * 删除项目
+   */
+  deleteProject(projectId) {
+    const dir = path.join(this.dataDir, projectId);
+    if (!fs.existsSync(dir)) return false;
+    fs.rmSync(dir, { recursive: true, force: true });
+    return true;
+  }
+
+  /**
    * 更新人物档案
    */
   updateCharacter(projectId, characterData) {

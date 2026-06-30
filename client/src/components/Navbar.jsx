@@ -3,8 +3,10 @@ import { motion } from 'framer-motion';
 import { useStore } from '../stores/useStore';
 
 const NAV_ITEMS = [
-  { id: 'home', label: '首页', icon: '🏠', filter: null },
-  { id: 'canvas', label: '无限画布', icon: '🎨', filter: null },
+  { id: 'home', label: '首页', icon: '🏠', filter: null, view: 'home' },
+  { id: 'canvas', label: '无限画布', icon: '🎨', filter: null, view: 'canvas' },
+  { id: 'editor', label: '编辑器', icon: '✍️', filter: null, view: 'editor' },
+  null, // divider
   { id: 'characters', label: '人物', icon: '👤', filter: 'character' },
   { id: 'chapters', label: '章节', icon: '📖', filter: 'chapter' },
   { id: 'locations', label: '地点', icon: '📍', filter: 'location' },
@@ -16,12 +18,15 @@ export function Navbar() {
   const { activeView, setActiveView, project, setNodeFilter, canvas } = useStore();
 
   const handleNav = (item) => {
-    if (item.id === 'home') {
+    if (!item) return;
+    if (item.view) {
+      // View-based navigation (home, canvas, editor)
+      if (item.view === 'home') {
+        useStore.getState().setProject(null);
+        return;
+      }
       setNodeFilter(null);
-      setActiveView('home');
-      // Clear project to go back to home
-      const store = useStore.getState();
-      store.setProject(null);
+      setActiveView(item.view);
       return;
     }
     if (item.filter) {
@@ -54,23 +59,22 @@ export function Navbar() {
       </div>
 
       <div style={styles.navItems}>
-        {NAV_ITEMS.map(item => (
-          <motion.button
-            key={item.id}
-            whileHover={{ scale: 1.02, backgroundColor: 'var(--accent-hover)' }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => handleNav(item)}
-            style={{
-              ...styles.navItem,
-              background: (item.filter === null && activeView === item.id) || (item.filter && activeView === 'canvas')
-                ? (item.filter ? 'transparent' : 'var(--accent-hover)')
-                : 'transparent',
-              color: activeView === item.id || (item.filter && activeView === 'canvas')
-                ? 'var(--text-primary)'
-                : 'var(--text-secondary)',
-              fontWeight: activeView === item.id ? 600 : 400,
-            }}
-          >
+        {NAV_ITEMS.map(item => {
+          if (!item) return <div key="div" style={{ height: 1, background: 'var(--border)', margin: '4px 10px' }} />;
+          const isActive = item.view ? activeView === item.view : (item.filter && activeView === 'canvas');
+          return (
+            <motion.button
+              key={item.id}
+              whileHover={{ scale: 1.02, backgroundColor: 'var(--accent-hover)' }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleNav(item)}
+              style={{
+                ...styles.navItem,
+                background: isActive ? 'var(--accent-hover)' : 'transparent',
+                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: isActive ? 600 : 400,
+              }}
+            >
             <span style={styles.navIcon}>{item.icon}</span>
             <span style={styles.navLabel}>{item.label}</span>
             {item.filter && counts[item.filter] > 0 && (

@@ -121,14 +121,25 @@ export function HomePage({ projects, onCreate, onSelect }) {
             <h3 style={styles.sectionTitle}>最近创作</h3>
             <div style={styles.grid}>
               {projects.map(p => (
-                <motion.div
-                  key={p.id}
-                  whileHover={{ scale: 1.02, boxShadow: 'var(--shadow-md)' }}
-                  onClick={() => onSelect(p)}
-                  style={styles.projectCard}
-                >
-                  <div style={styles.projectName}>{p.name}</div>
-                  <div style={styles.projectMeta}>第{p.currentChapter}章 · {new Date(p.createdAt).toLocaleDateString()}</div>
+                <motion.div key={p.id} whileHover={{ scale: 1.02, boxShadow: 'var(--shadow-md)' }}
+                  style={styles.projectCard}>
+                  <div onClick={() => {
+                    fetch(`/api/projects/${p.id}`).then(r => r.json()).then(onSelect);
+                  }} style={{ cursor: 'pointer', flex: 1 }}>
+                    <div style={styles.projectName}>{p.name}</div>
+                    <div style={styles.projectMeta}>第{p.currentChapter}章 · {new Date(p.createdAt).toLocaleDateString()}</div>
+                  </div>
+                  <button onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`确定删除「${p.name}」？此操作不可撤销。`)) {
+                      fetch(`/api/projects/${p.id}`, { method: 'DELETE' })
+                        .then(() => {
+                          const updated = projects.filter(proj => proj.id !== p.id);
+                          // Refresh projects from store
+                          window.location.reload();
+                        });
+                    }
+                  }} style={styles.deleteProjectBtn} title="删除项目">🗑</button>
                 </motion.div>
               ))}
             </div>
@@ -196,7 +207,11 @@ const styles = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 },
   projectCard: {
     padding: '18px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
-    background: 'var(--bg-card)', cursor: 'pointer',
+    background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 10,
+  },
+  deleteProjectBtn: {
+    background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1em',
+    padding: '4px 8px', borderRadius: 4, opacity: 0.4, transition: 'opacity 0.15s',
   },
   projectName: { fontSize: '0.9em', fontWeight: 600, color: 'var(--text-primary)' },
   projectMeta: { fontSize: '0.75em', color: 'var(--text-secondary)', marginTop: 4 },

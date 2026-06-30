@@ -7,6 +7,8 @@ import { AIAssistant } from './components/AIAssistant';
 import { NodeDetail } from './components/NodeDetail';
 import { HomePage } from './components/HomePage';
 
+import { ChapterEditor } from './components/ChapterEditor';
+
 export default function App() {
   const { project, setProject, projects, setProjects, activeView, setActiveView, undo, redo } = useStore();
   const [selectedNode, setSelectedNode] = useState(null);
@@ -60,8 +62,14 @@ export default function App() {
   return (
     <div style={styles.layout}>
       <Navbar />
-      <Canvas onNodeClick={setSelectedNode} />
-      <AIAssistant projectId={project.id} />
+      {activeView === 'editor' ? (
+        <ChapterEditor />
+      ) : (
+        <>
+          <Canvas onNodeClick={setSelectedNode} />
+          <AIAssistant projectId={project.id} />
+        </>
+      )}
       <AnimatePresence>
         {selectedNode && (
           <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)} />

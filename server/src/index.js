@@ -56,6 +56,21 @@ app.get('/api/projects/:id/chapters/:num', (req, res) => {
   res.json(chapter);
 });
 
+// 保存章节内容
+app.put('/api/projects/:id/chapters/:num', (req, res) => {
+  const { content } = req.body;
+  const project = projects.saveChapter(req.params.id, parseInt(req.params.num), content);
+  if (!project) return res.status(404).json({ error: '项目不存在' });
+  res.json({ success: true, chapter: project.chapters[req.params.num] });
+});
+
+// 删除项目
+app.delete('/api/projects/:id', (req, res) => {
+  const success = projects.deleteProject(req.params.id);
+  if (!success) return res.status(404).json({ error: '项目不存在' });
+  res.json({ success: true });
+});
+
 // ─── 核心：Agent交互接口 (SSE流式) ──────────────
 
 app.post('/api/projects/:id/chat', async (req, res) => {
