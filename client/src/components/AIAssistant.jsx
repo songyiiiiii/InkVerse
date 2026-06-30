@@ -1,57 +1,83 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../stores/useStore';
 
 const TABS = [
-  { id: 'plot', label: '剧情建议', icon: '📝' },
-  { id: 'character', label: '人物建议', icon: '👤' },
-  { id: 'chapter', label: '章节建议', icon: '📖' },
-  { id: 'foreshadow', label: '伏笔建议', icon: '🔮' },
+  { id: 'plot', label: '剧情', icon: '📝' },
+  { id: 'character', label: '人物', icon: '👤' },
+  { id: 'chapter', label: '章节', icon: '📖' },
+  { id: 'foreshadow', label: '伏笔', icon: '🔮' },
   { id: 'world', label: '世界观', icon: '🌍' },
 ];
 
-const MOCK_SUGGESTIONS = {
-  plot: [
-    { id: 1, title: '引入新冲突', desc: '在第3章中揭示系统选择玩家的真实标准，让宋见微意识到自己并非随机被选中' },
-    { id: 2, title: '情感转折', desc: '陆砚在矿道中看到宋见微摘下眼镜——这是全书中他第一次看到真实的宋见微' },
-    { id: 3, title: '副本设计', desc: '下一副本可基于\"黑水矿难\"历史事件，强调体制层面的罪孽' },
-  ],
-  character: [
-    { id: 4, title: '宋见微的过去', desc: '扩展童年两个家庭切换的经历——这是伪装能力的情感根源' },
-    { id: 5, title: '陆砚的执念', desc: '加强师父女儿的线索——她在矿难副本中留下的\"陆哥，别找了\"' },
-  ],
-  chapter: [
-    { id: 6, title: '第3章建议', desc: '从白色大厅开场，两人通过声音认出彼此——笔转动的节奏 + 擦眼镜的手' },
-    { id: 7, title: '第4章建议', desc: '系统发布规则，随机组队——两人分到同一组，第一次在无限流中对话' },
-  ],
-  foreshadow: [
-    { id: 8, title: '回收\"4分37秒\"', desc: '在第3章揭示：宋见微也保留了那段录音——他在听的时候发现了同样的恐惧' },
-    { id: 9, title: '回收\"眼镜停顿\"', desc: '宋见微在审讯中注意到的细节——陆砚擦眼镜时手停了一瞬。在白色大厅再次触发' },
-  ],
-  world: [
-    { id: 10, title: '系统规则深化', desc: '系统是集体潜意识的具现——副本基于真实历史事件扭曲而成' },
-    { id: 11, title: '安全区设计', desc: '白色走廊、积分商店、排名系统——三个核心机制的详细规则' },
-  ],
-};
-
 export function AIAssistant({ projectId }) {
   const [activeTab, setActiveTab] = useState('plot');
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
   const { addNode, canvas } = useStore();
+  const msgRef = useRef(null);
 
-  const suggestions = MOCK_SUGGESTIONS[activeTab] || [];
+  useEffect(() => { if (msgRef.current) msgRef.current.scrollTop = msgRef.current.scrollHeight; }, [messages]);
 
-  const insertToCanvas = (suggestion) => {
-    // Calculate position away from existing nodes
-    const offsetX = (canvas.nodes.length % 4) * 250 + 100;
-    const offsetY = Math.floor(canvas.nodes.length / 4) * 180 + 400;
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setSuggestions([]);
+    setLoading(true);
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg, mode: 'copilot' }),
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let aiContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'final') {
+              aiContent = data.response || aiContent;
+              // Parse suggestions from AI response
+              const items = parseSuggestions(aiContent, activeTab);
+              setSuggestions(items);
+            } else if (data.type === 'thinking') {
+              // Show thinking state
+            }
+          } catch {}
+        }
+      }
+      if (aiContent) {
+        setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '❌ 连接失败，请检查后端服务是否运行。' }]);
+    }
+    setLoading(false);
+  };
+
+  const insertToCanvas = (s) => {
+    const types = { plot: 'event', character: 'character', chapter: 'chapter', foreshadow: 'foreshadow', world: 'location' };
     addNode({
-      type: activeTab === 'foreshadow' ? 'foreshadow' :
-            activeTab === 'character' ? 'character' :
-            activeTab === 'world' ? 'location' : 'event',
-      x: offsetX,
-      y: offsetY,
-      title: suggestion.title,
-      subtitle: suggestion.desc.slice(0, 60) + '...',
+      type: types[activeTab] || 'event',
+      x: 100 + (canvas.nodes.length % 4) * 250,
+      y: 600 + Math.floor(canvas.nodes.length / 4) * 180,
+      title: s.title,
+      subtitle: s.desc.slice(0, 80),
       meta: 'AI生成',
       aiGenerated: true,
     });
@@ -61,169 +87,85 @@ export function AIAssistant({ projectId }) {
     <aside style={styles.panel}>
       <div style={styles.header}>
         <div style={styles.headerTitle}>✨ AI 创作工作台</div>
-        <div style={styles.headerSub}>协同创作 · 持续更新</div>
+        <div style={styles.headerSub}>输入创作想法，AI实时响应</div>
       </div>
 
       {/* Tabs */}
       <div style={styles.tabs}>
         {TABS.map(tab => (
-          <motion.button
-            key={tab.id}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          <motion.button key={tab.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
             onClick={() => setActiveTab(tab.id)}
-            style={{
-              ...styles.tab,
-              background: activeTab === tab.id ? 'var(--accent)' : 'transparent',
-              color: activeTab === tab.id ? '#fff' : 'var(--text-secondary)',
-            }}
-          >
-            <span style={{ fontSize: '0.8em' }}>{tab.icon}</span>
-            <span style={{ fontSize: '0.72em' }}>{tab.label}</span>
+            style={{ ...styles.tab, background: activeTab === tab.id ? 'var(--accent)' : 'transparent', color: activeTab === tab.id ? '#fff' : 'var(--text-secondary)' }}>
+            <span>{tab.icon}</span><span style={{ fontSize: '0.7em' }}>{tab.label}</span>
           </motion.button>
         ))}
       </div>
 
-      {/* Suggestions */}
-      <div style={styles.content}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
-          >
-            {suggestions.map((s, i) => (
-              <motion.div
-                key={s.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08 }}
-                style={styles.card}
-                whileHover={{ boxShadow: 'var(--shadow-md)' }}
-              >
-                <div style={styles.cardTitle}>{s.title}</div>
-                <div style={styles.cardDesc}>{s.desc}</div>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => insertToCanvas(s)}
-                  style={styles.insertBtn}
-                >
-                  + 插入画布
-                </motion.button>
-              </motion.div>
-            ))}
+      {/* Messages + Suggestions */}
+      <div style={styles.content} ref={msgRef}>
+        {messages.length === 0 && suggestions.length === 0 && (
+          <div style={styles.empty}>
+            <div style={{ fontSize: '2em', marginBottom: 8 }}>💬</div>
+            <div style={{ fontSize: '0.82em', color: 'var(--text-secondary)', marginBottom: 4 }}>告诉我你的创作想法</div>
+            <div style={{ fontSize: '0.7em', color: '#aaa' }}>例如："帮我构思第3章的开场"</div>
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{ ...styles.msg, alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? 'var(--accent-hover)' : 'var(--bg-primary)', color: m.role === 'user' ? 'var(--accent)' : 'var(--text-primary)' }}>
+            {m.content.length > 300 ? m.content.slice(0, 300) + '...' : m.content}
+          </div>
+        ))}
+        {suggestions.map((s, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} style={styles.card}>
+            <div style={styles.cardTitle}>{s.title}</div>
+            <div style={styles.cardDesc}>{s.desc}</div>
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => insertToCanvas(s)} style={styles.insertBtn}>+ 插入画布</motion.button>
           </motion.div>
-        </AnimatePresence>
+        ))}
+        {loading && <div style={{ textAlign: 'center', color: '#aaa', fontSize: '0.8em', padding: 12 }}>✨ AI思考中...</div>}
       </div>
 
-      {/* Chat bottom */}
+      {/* Chat input */}
       <div style={styles.chatArea}>
-        <textarea
-          placeholder="对AI说你的想法..."
-          style={styles.chatInput}
-          rows={2}
-        />
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          style={styles.chatSend}
-        >
-          发送
-        </motion.button>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } }}
+          placeholder="输入创作想法..." style={styles.chatInput} />
+        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={sendMessage} disabled={loading}
+          style={{ ...styles.chatSend, opacity: loading ? 0.5 : 1 }}>发送</motion.button>
       </div>
     </aside>
   );
 }
 
+function parseSuggestions(text, tab) {
+  const items = [];
+  const lines = text.split(/\d+\.\s+/).filter(Boolean);
+  for (const line of lines) {
+    const colon = line.indexOf('：') >= 0 ? '：' : line.indexOf(':') >= 0 ? ':' : null;
+    if (colon) {
+      items.push({ title: line.slice(0, colon).trim().slice(0, 30), desc: line.slice(colon + 1).trim().slice(0, 120) });
+    } else if (line.trim().length > 10) {
+      items.push({ title: line.trim().slice(0, 30), desc: line.trim().slice(0, 120) });
+    }
+  }
+  return items.slice(0, 5);
+}
+
 const styles = {
-  panel: {
-    width: 320,
-    minWidth: 320,
-    height: '100vh',
-    background: 'var(--bg-card)',
-    borderLeft: '1px solid var(--border)',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  header: {
-    padding: '20px 20px 12px',
-    borderBottom: '1px solid var(--border)',
-  },
-  headerTitle: { fontSize: '0.95em', fontWeight: 700, color: 'var(--text-primary)' },
-  headerSub: { fontSize: '0.7em', color: 'var(--text-secondary)', marginTop: 2 },
-  tabs: {
-    display: 'flex',
-    gap: 4,
-    padding: '10px 12px',
-    overflow: 'auto',
-  },
-  tab: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-    padding: '5px 10px',
-    borderRadius: 'var(--radius-sm)',
-    border: 'none',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    transition: 'all 0.15s',
-  },
-  content: {
-    flex: 1,
-    overflow: 'auto',
-    padding: '8px 14px',
-  },
-  card: {
-    padding: '14px',
-    borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border)',
-    marginBottom: 8,
-    background: 'var(--bg-primary)',
-    cursor: 'default',
-  },
-  cardTitle: { fontSize: '0.82em', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 },
-  cardDesc: { fontSize: '0.75em', color: 'var(--text-secondary)', lineHeight: 1.5 },
-  insertBtn: {
-    marginTop: 8,
-    padding: '4px 12px',
-    borderRadius: 6,
-    border: '1px solid var(--accent)',
-    background: 'transparent',
-    color: 'var(--accent)',
-    cursor: 'pointer',
-    fontSize: '0.7em',
-    fontWeight: 600,
-  },
-  chatArea: {
-    padding: '12px 14px',
-    borderTop: '1px solid var(--border)',
-    display: 'flex',
-    gap: 8,
-  },
-  chatInput: {
-    flex: 1,
-    padding: '8px 12px',
-    borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border)',
-    fontSize: '0.8em',
-    color: 'var(--text-primary)',
-    background: 'var(--bg-primary)',
-    resize: 'none',
-    outline: 'none',
-  },
-  chatSend: {
-    padding: '6px 14px',
-    borderRadius: 'var(--radius-sm)',
-    border: 'none',
-    background: 'var(--accent)',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '0.78em',
-    fontWeight: 600,
-    alignSelf: 'flex-end',
-  },
+  panel: { width: 320, minWidth: 320, height: '100vh', background: 'var(--bg-card)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  header: { padding: '16px 18px 10px', borderBottom: '1px solid var(--border)' },
+  headerTitle: { fontSize: '0.9em', fontWeight: 700, color: 'var(--text-primary)' },
+  headerSub: { fontSize: '0.68em', color: 'var(--text-secondary)', marginTop: 2 },
+  tabs: { display: 'flex', gap: 3, padding: '8px 10px', overflow: 'auto' },
+  tab: { display: 'flex', alignItems: 'center', gap: 3, padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s', fontSize: '0.78em' },
+  content: { flex: 1, overflow: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 },
+  empty: { textAlign: 'center', padding: '40px 0' },
+  msg: { padding: '8px 12px', borderRadius: 10, fontSize: '0.78em', lineHeight: 1.5, maxWidth: '90%' },
+  card: { padding: '12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-primary)' },
+  cardTitle: { fontSize: '0.8em', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 },
+  cardDesc: { fontSize: '0.73em', color: 'var(--text-secondary)', lineHeight: 1.5 },
+  insertBtn: { marginTop: 6, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.68em', fontWeight: 600 },
+  chatArea: { padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6 },
+  chatInput: { flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: '0.8em', color: 'var(--text-primary)', background: 'var(--bg-primary)', outline: 'none' },
+  chatSend: { padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: '0.78em', fontWeight: 600 },
 };

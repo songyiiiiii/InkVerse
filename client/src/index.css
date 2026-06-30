@@ -112,3 +112,100 @@ p, span, div { font-weight: 400; }
 .context-menu-item.danger:hover { background: #FEE2E2; }
 .context-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
 
+/* ======================================================
+   🎨 新增：浮动光晕动画（用于首页背景装饰）
+   ====================================================== */
+
+@keyframes floatBlob {
+  0%, 100% { 
+    transform: translate(0, 0) scale(1); 
+  }
+  33% { 
+    transform: translate(30px, -30px) scale(1.1); 
+  }
+  66% { 
+    transform: translate(-20px, 20px) scale(0.9); 
+  }
+}
+
+@keyframes pulseBlob {
+  0%, 100% { 
+    transform: translate(-50%, -50%) scale(1); 
+    opacity: 0.5; 
+  }
+  50% { 
+    transform: translate(-50%, -50%) scale(1.2); 
+    opacity: 1; 
+  }
+}
+
+/* ======================================================
+   🎨 新增：自定义工具类
+   ====================================================== */
+
+/* 浮动光晕动画工具类 */
+.animate-float-blob {
+  animation: floatBlob 20s ease-in-out infinite;
+}
+
+.animate-float-blob-reverse {
+  animation: floatBlob 25s ease-in-out infinite reverse;
+}
+
+.animate-pulse-blob {
+  animation: pulseBlob 15s ease-in-out infinite;
+}
+
+/* 背景装饰不阻挡交互 */
+.bg-decorations {
+  pointer-events: none;
+}
+
+/* ======================================================
+   🎨 优化：滚动条美化（覆盖之前的简洁版）
+   ====================================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6366F1;
+}
+
+/* ======================================================
+   🎨 新增：选中文本样式
+   ====================================================== */
+
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: var(--text-primary);
+}
+
+/* ======================================================
+   🎨 新增：输入框 placeholder 样式
+   ====================================================== */
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+/* ======================================================
+   🎨 新增：全局过渡动画
+   ====================================================== */
+
+* {
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}

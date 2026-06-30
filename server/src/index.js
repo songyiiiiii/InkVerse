@@ -64,7 +64,29 @@ app.put('/api/projects/:id/chapters/:num', (req, res) => {
   res.json({ success: true, chapter: project.chapters[req.params.num] });
 });
 
-// 删除项目
+// 导出项目为TXT
+app.get('/api/projects/:id/export', (req, res) => {
+  const project = projects.getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: '项目不存在' });
+
+  let output = `《${project.name}》\n`;
+  output += `题材：${project.config?.genre || ''}\n`;
+  output += `创建时间：${project.createdAt}\n`;
+  output += `${'='.repeat(50)}\n\n`;
+
+  const total = project.config?.totalChapters || 65;
+  for (let i = 1; i <= total; i++) {
+    const ch = project.chapters?.[i];
+    if (ch?.content && ch.content.length > 100) {
+      output += `第${i}章\n\n${ch.content}\n\n`;
+      output += `${'-'.repeat(30)}\n\n`;
+    }
+  }
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(project.name)}.txt"`);
+  res.send(output);
+});
 app.delete('/api/projects/:id', (req, res) => {
   const success = projects.deleteProject(req.params.id);
   if (!success) return res.status(404).json({ error: '项目不存在' });
