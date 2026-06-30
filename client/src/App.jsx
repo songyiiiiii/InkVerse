@@ -34,8 +34,8 @@ export default function App() {
     const refresh = () => {
       fetch('/api/projects')
         .then(r => r.json())
-        .then(setProjects)
-        .catch(() => {});
+        .then(data => Array.isArray(data) ? setProjects(data) : setProjects([]))
+        .catch(() => setProjects([]));
     };
     refresh();
     // Refresh every time project changes (to update list)

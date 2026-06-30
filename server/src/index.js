@@ -117,12 +117,12 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 
 // ─── REST API ───────────────────────────────────
 
-// 项目列表（仅返回当前用户的项目）
-app.get('/api/projects', authMiddleware, (req, res) => {
+// 项目列表（未登录返回空列表）
+app.get('/api/projects', optionalAuth, (req, res) => {
+  if (!req.username) return res.json([]);
   const userProjects = users.getUserProjects(req.username);
   const allProjects = projects.listProjects();
-  const filtered = allProjects.filter(p => userProjects.includes(p.id));
-  res.json(filtered);
+  res.json(allProjects.filter(p => userProjects.includes(p.id)));
 });
 
 // 创建项目（自动关联到当前用户）
