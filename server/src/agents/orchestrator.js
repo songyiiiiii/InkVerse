@@ -51,8 +51,14 @@ export class AgentOrchestrator {
         break;
 
       case 'revise':
-        this._emit(onStep, { type: 'revise_start', message: '定位修改内容...' });
-        result = await this.reviseAgent.execute(userInput, context, mode, onStep);
+        // Route text/chapter modifications to discuss agent (which has full context)
+        if (intent.subtype === '修改文本' || intent.subtype === '章节写作') {
+          this._emit(onStep, { type: 'discuss_start', message: '正在分析你的小说...' });
+          result = await this.discussAgent.execute(userInput, context, mode, onStep);
+        } else {
+          this._emit(onStep, { type: 'revise_start', message: '定位修改内容...' });
+          result = await this.reviseAgent.execute(userInput, context, mode, onStep);
+        }
         break;
 
       case 'discuss':
