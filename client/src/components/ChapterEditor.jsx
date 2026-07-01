@@ -39,18 +39,33 @@ export function ChapterEditor() {
 
   // ─── Inline AI Bubble ─────────────────
 
+  const aiBubbleRef = useRef(null);
+  // Keep ref in sync
+  useEffect(() => { aiBubbleRef.current = aiBubble; }, [aiBubble]);
+
   const handleTextSelect = () => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart, end = ta.selectionEnd;
-    if (start === end || !ta.value.slice(start, end).trim()) { setAiBubble(null); return; }
-    const selectedText = ta.value.slice(start, end);
-    // Position bubble near selection
-    const rect = ta.getBoundingClientRect();
-    // Approximate position based on selection ratio
-    const ratio = start / Math.max(ta.value.length, 1);
-    const y = rect.top + rect.height * ratio;
-    setAiBubble({ x: rect.right + 20, y: Math.min(y, window.innerHeight - 200), selectedText, input: '', loading: false, response: '' });
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const start = ta.selectionStart, end = ta.selectionEnd;
+      if (start === end) { setAiBubble(null); return; }
+      const selected = ta.value.slice(start, end);
+      if (!selected.trim()) { setAiBubble(null); return; }
+      if (aiBubbleRef.current?.loading) return;
+
+      const selRange = window.getSelection();
+      let x, y;
+      if (selRange && selRange.rangeCount > 0) {
+        const rect = selRange.getRangeAt(0).getBoundingClientRect();
+        x = Math.min(rect.right + 12, window.innerWidth - 300);
+        y = Math.max(10, rect.top - 10);
+      } else {
+        const taRect = ta.getBoundingClientRect();
+        x = Math.min(taRect.right + 16, window.innerWidth - 300);
+        y = Math.max(60, taRect.top + taRect.height * (start / Math.max(ta.value.length, 1)));
+      }
+      setAiBubble({ x, y, selectedText: selected, input: '', loading: false, response: '' });
+    }, 60);
   };
 
   const sendInlineAI = async () => {
@@ -98,8 +113,6 @@ export function ChapterEditor() {
 
   const handleContentChange = (e) => {
     setContent(e.target.value);
-    // Clear AI bubble if user starts typing
-    if (aiBubble && !aiBubble.loading) setAiBubble(null);
   };
 
   return (
