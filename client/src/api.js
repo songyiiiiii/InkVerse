@@ -15,5 +15,5 @@ export const api = {
   post: (url, body) => fetch(BASE + url, { method: 'POST', headers: headers(), body: JSON.stringify(body) }).then(r => r.json()),
   put: (url, body) => fetch(BASE + url, { method: 'PUT', headers: headers(), body: JSON.stringify(body) }).then(r => r.json()),
   del: (url) => fetch(BASE + url, { method: 'DELETE', headers: headers(false) }).then(r => r.json()),
-  getRaw: (url) => fetch(BASE + url, { headers: headers(false) }),
+  getRaw: (url, opts = {}) => fetch(BASE + url, { ...opts, headers: { ...headers(true), ...(opts.headers || {}) } }),
 };
