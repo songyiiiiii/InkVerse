@@ -249,16 +249,26 @@ app.post('/api/projects/:id/chat', authMiddleware, async (req, res) => {
   };
 
   try {
-    // 更新上下文
+    // 获取章节内容详情供AI分析
+    const chapterNums = Object.keys(project.chapters || {});
+    const chapterSummaries = chapterNums.map(n => ({
+      num: n,
+      wordCount: (project.chapters[n]?.content || '').length,
+      preview: (project.chapters[n]?.content || '').slice(0, 500),
+    }));
+
+    // 构建上下文（合并前端传来的额外上下文）
     const context = {
       projectId,
       mode: mode || project.mode || 'copilot',
       currentChapter: project.currentChapter,
       outline: project.outline,
       characters: project.characters.map(c => `${c.name}(${c.role})`).join(', '),
+      chapters: chapterSummaries,
       lastChapterEnding: project.context?.lastChapterEnding || '',
       recentMessages: project.context?.recentMessages || [],
       preferredPOV: project.config?.preferredPOV || '宋见微',
+      frontendContext: req.body.context || {},
     };
 
     // 执行Agent链路

@@ -17,7 +17,7 @@ export function AIAssistant({ projectId }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
-  const { addNode, canvas } = useStore();
+  const { addNode, canvas, project } = useStore();
   const msgRef = useRef(null);
 
   useEffect(() => { if (msgRef.current) msgRef.current.scrollTop = msgRef.current.scrollHeight; }, [messages]);
@@ -31,10 +31,29 @@ export function AIAssistant({ projectId }) {
     setLoading(true);
 
     try {
+      // Build project context for AI
+      const chapterKeys = Object.keys(project?.chapters || {});
+      const chapterData = chapterKeys.map(k => ({
+        num: k,
+        title: project?.chapters[k]?.title || `第${k}章`,
+        preview: (project?.chapters[k]?.content || '').slice(0, 300),
+        wordCount: project?.chapters[k]?.wordCount || (project?.chapters[k]?.content || '').length,
+      }));
+      const context = {
+        projectName: project?.name || '',
+        genre: project?.config?.genre || '',
+        totalChapters: project?.config?.totalChapters || 65,
+        currentChapter: project?.currentChapter || 1,
+        characters: project?.characters || [],
+        outline: project?.outline || {},
+        chapters: chapterData,
+        canvasNodes: canvas.nodes.map(n => ({ type: n.type, title: n.title, subtitle: n.subtitle })),
+      };
+
       const res = await api.getRaw(`/api/projects/${projectId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, mode: 'copilot' }),
+        body: JSON.stringify({ message: userMsg, mode: 'copilot', context }),
       });
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
