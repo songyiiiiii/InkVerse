@@ -1,3 +1,4 @@
+import { api } from '../api.js';
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '../stores/useStore';
@@ -20,16 +21,10 @@ export function ChapterEditor() {
     if (!project) return;
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/projects/${project.id}/chapters/${selectedChapter}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
-      if (res.ok) {
+      const res = await api.put(`/api/projects/${project.id}/chapters/${selectedChapter}`, { content });
+      if (res.success) {
         setSaveMsg('已保存');
-        // Refresh project
-        const pRes = await fetch(`/api/projects/${project.id}`);
-        const updated = await pRes.json();
+        const updated = await api.get(`/api/projects/${project.id}`);
         setProject(updated);
       } else {
         setSaveMsg('保存失败');

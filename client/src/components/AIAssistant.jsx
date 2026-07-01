@@ -1,3 +1,4 @@
+import { api } from '../api.js';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../stores/useStore';
@@ -30,7 +31,7 @@ export function AIAssistant({ projectId }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/chat`, {
+      const res = await api.getRaw(`/api/projects/${projectId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg, mode: 'copilot' }),

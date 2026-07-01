@@ -1,3 +1,4 @@
+import { api } from '../api.js';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -15,7 +16,7 @@ export function HomePage({ projects, onCreate, onSelect, user, onLoginClick, onL
     if (!name.trim()) return;
     const existing = projects.find(p => p.name === name.trim());
     if (existing) {
-      fetch(`/api/projects/${existing.id}`).then(r => r.json()).then(onSelect);
+      api.get(`/api/projects/${existing.id}`).then(onSelect);
     } else {
       onCreate(name, { genre, totalChapters: 65, synopsis });
     }
@@ -29,7 +30,7 @@ export function HomePage({ projects, onCreate, onSelect, user, onLoginClick, onL
   const loadOrCreate = (projectName, config) => {
     const existing = projects.find(p => p.name === projectName);
     if (existing) {
-      fetch(`/api/projects/${existing.id}`).then(r => r.json()).then(onSelect);
+      api.get(`/api/projects/${existing.id}`).then(onSelect);
     } else {
       onCreate(projectName, config);
     }
@@ -53,7 +54,7 @@ export function HomePage({ projects, onCreate, onSelect, user, onLoginClick, onL
   ];
 
   const handleExport = async (project) => {
-    const res = await fetch(`/api/projects/${project.id}/export`);
+    const res = await api.getRaw(`/api/projects/${project.id}/export`);
     if (res.ok) {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -184,13 +185,13 @@ export function HomePage({ projects, onCreate, onSelect, user, onLoginClick, onL
             <div style={styles.grid}>
               {filteredProjects.map(p => (
                 <motion.div key={p.id} whileHover={{ scale: 1.02 }} style={styles.projectCard}>
-                  <div onClick={() => { fetch(`/api/projects/${p.id}`).then(r => r.json()).then(onSelect); }} style={{ cursor: 'pointer', flex: 1 }}>
+                  <div onClick={() => { api.get(`/api/projects/${p.id}`).then(onSelect); }} style={{ cursor: 'pointer', flex: 1 }}>
                     <div style={styles.projectName}>{p.name}</div>
                     <div style={styles.projectMeta}>第{p.currentChapter}章 · {p.config?.genre || ''} · {new Date(p.createdAt).toLocaleDateString()}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button onClick={(e) => { e.stopPropagation(); handleExport(p); }} style={styles.actionBtn} title="导出">📥</button>
-                    <button onClick={(e) => { e.stopPropagation(); if (confirm('确定删除？')) { fetch(`/api/projects/${p.id}`, { method: 'DELETE' }).then(() => window.location.reload()); } }} style={styles.dangerBtn} title="删除">🗑</button>
+                    <button onClick={(e) => { e.stopPropagation(); if (confirm('确定删除？')) { api.del(`/api/projects/${p.id}`).then(() => window.location.reload()); } }} style={styles.dangerBtn} title="删除">🗑</button>
                   </div>
                 </motion.div>
               ))}

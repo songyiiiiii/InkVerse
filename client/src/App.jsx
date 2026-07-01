@@ -9,6 +9,7 @@ import { NodeDetail } from './components/NodeDetail';
 import { HomePage } from './components/HomePage';
 import { ChapterEditor } from './components/ChapterEditor';
 import { AuthModal } from './components/AuthModal';
+import { api } from './api';
 
 export default function App() {
   const { user, token, login, logout, project, setProject, projects, setProjects, activeView, setActiveView, undo, redo } = useStore();
@@ -28,11 +29,7 @@ export default function App() {
   // Fetch projects
   useEffect(() => {
     const refresh = () => {
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      fetch('/api/projects', { headers })
-        .then(r => r.json())
-        .then(data => Array.isArray(data) ? setProjects(data) : setProjects([]))
-        .catch(() => setProjects([]));
+      api.get('/api/projects').then(data => setProjects(Array.isArray(data) ? data : [])).catch(() => setProjects([]));
     };
     refresh();
     const interval = setInterval(refresh, 5000);
@@ -40,10 +37,7 @@ export default function App() {
   }, [token, setProjects]);
 
   const createProject = async (name, config = {}) => {
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch('/api/projects', { method: 'POST', headers, body: JSON.stringify({ name, config: { genre: config.genre || '悬疑', totalChapters: config.totalChapters || 65, ...config } }) });
-    const proj = await res.json();
+    const proj = await api.post('/api/projects', { name, config: { genre: config.genre || '悬疑', totalChapters: config.totalChapters || 65, ...config } });
     setProject(proj);
     setActiveView('canvas');
     return proj;
