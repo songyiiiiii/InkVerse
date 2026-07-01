@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export function HomePage({ projects, onCreate, onSelect }) {
+export function HomePage({ projects, onCreate, onSelect, user, onLoginClick, onLogout }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
@@ -75,6 +75,18 @@ export function HomePage({ projects, onCreate, onSelect }) {
           <div style={styles.logo}>✧</div>
           <h1 style={styles.title}>InkVerse</h1>
           <p style={styles.slogan}>Where Stories Become Universes.</p>
+          <div style={{ marginTop: 16 }}>
+            {user ? (
+              <span style={{ fontSize: '0.9em', color: 'var(--text-secondary)' }}>
+                👋 {user.username} · <button onClick={onLogout} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 'inherit' }}>退出</button>
+              </span>
+            ) : (
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={onLoginClick}
+                style={{ padding: '8px 24px', borderRadius: 10, border: '1px solid var(--accent)', background: 'var(--bg-card)', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600, fontSize: '0.9em' }}>
+                👤 登录 / 注册
+              </motion.button>
+            )}
+          </div>
         </motion.div>
 
         {/* Quick Actions */}
