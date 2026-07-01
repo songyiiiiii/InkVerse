@@ -17,10 +17,18 @@ export function AIAssistant({ projectId }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
-  const { addNode, canvas, project } = useStore();
+  const { addNode, canvas, project, setProject } = useStore();
   const msgRef = useRef(null);
 
   useEffect(() => { if (msgRef.current) msgRef.current.scrollTop = msgRef.current.scrollHeight; }, [messages]);
+
+  const saveToChapter = async (chapterNum, content) => {
+    if (!project) return;
+    await api.put('/api/projects/' + project.id + '/chapters/' + chapterNum, { content });
+    const updated = await api.get('/api/projects/' + project.id);
+    setProject(updated);
+    alert('已保存到第' + chapterNum + '章');
+  };
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -29,127 +37,84 @@ export function AIAssistant({ projectId }) {
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setSuggestions([]);
     setLoading(true);
-
     try {
-      // Build project context for AI
       const chapterKeys = Object.keys(project?.chapters || {});
-      const chapterData = chapterKeys.map(k => ({
-        num: k,
-        title: project?.chapters[k]?.title || `第${k}章`,
-        preview: (project?.chapters[k]?.content || '').slice(0, 300),
-        wordCount: project?.chapters[k]?.wordCount || (project?.chapters[k]?.content || '').length,
-      }));
-      const context = {
-        projectName: project?.name || '',
-        genre: project?.config?.genre || '',
-        totalChapters: project?.config?.totalChapters || 65,
-        currentChapter: project?.currentChapter || 1,
-        characters: project?.characters || [],
-        outline: project?.outline || {},
-        chapters: chapterData,
+      const ctx = {
+        projectName: project?.name || '', genre: project?.config?.genre || '',
+        chapters: chapterKeys.map(k => ({ num: k, preview: (project?.chapters[k]?.content || '').slice(0, 500), wordCount: project?.chapters[k]?.wordCount || 0 })),
         canvasNodes: canvas.nodes.map(n => ({ type: n.type, title: n.title, subtitle: n.subtitle })),
       };
-
-      const res = await api.getRaw(`/api/projects/${projectId}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, mode: 'copilot', context }),
+      const res = await api.getRaw('/api/projects/' + projectId + '/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg, mode: 'copilot', context: ctx }),
       });
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
-      let aiContent = '';
-
+      let buffer = '', aiContent = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const lines = buffer.split('\n'); buffer = lines.pop() || '';
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(line.slice(6));
-            if (data.type === 'final') {
-              aiContent = data.response || aiContent;
-              // Parse suggestions from AI response
-              const items = parseSuggestions(aiContent, activeTab);
-              setSuggestions(items);
-            } else if (data.type === 'thinking') {
-              // Show thinking state
-            }
+            if (data.type === 'final') { aiContent = data.response || aiContent; setSuggestions(parseSuggestions(aiContent)); }
           } catch {}
         }
       }
-      if (aiContent) {
-        setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
-      }
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: '❌ 连接失败，请检查后端服务是否运行。' }]);
-    }
+      if (aiContent) setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
+    } catch { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 连接失败' }]); }
     setLoading(false);
   };
 
   const insertToCanvas = (s) => {
-    const types = { plot: 'event', character: 'character', chapter: 'chapter', foreshadow: 'foreshadow', world: 'location' };
-    addNode({
-      type: types[activeTab] || 'event',
-      x: 100 + (canvas.nodes.length % 4) * 250,
-      y: 600 + Math.floor(canvas.nodes.length / 4) * 180,
-      title: s.title,
-      subtitle: s.desc.slice(0, 80),
-      meta: 'AI生成',
-      aiGenerated: true,
-    });
+    const m = { plot: 'event', character: 'character', chapter: 'chapter', foreshadow: 'foreshadow', world: 'location' };
+    addNode({ type: m[activeTab] || 'event', x: 100 + (canvas.nodes.length % 4) * 250, y: 600 + Math.floor(canvas.nodes.length / 4) * 180, title: s.title, subtitle: s.desc.slice(0, 80), meta: 'AI生成', aiGenerated: true });
   };
+
+  const chapterNums = Object.keys(project?.chapters || {}).slice(0, 5);
 
   return (
     <aside style={styles.panel}>
-      <div style={styles.header}>
-        <div style={styles.headerTitle}>✨ AI 创作工作台</div>
-        <div style={styles.headerSub}>输入创作想法，AI实时响应</div>
-      </div>
-
-      {/* Tabs */}
+      <div style={styles.header}><div style={styles.headerTitle}>✨ AI 创作工作台</div><div style={styles.headerSub}>我能读到你的小说 · 可直接修改</div></div>
       <div style={styles.tabs}>
         {TABS.map(tab => (
-          <motion.button key={tab.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-            onClick={() => setActiveTab(tab.id)}
+          <motion.button key={tab.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => setActiveTab(tab.id)}
             style={{ ...styles.tab, background: activeTab === tab.id ? 'var(--accent)' : 'transparent', color: activeTab === tab.id ? '#fff' : 'var(--text-secondary)' }}>
             <span>{tab.icon}</span><span style={{ fontSize: '0.7em' }}>{tab.label}</span>
           </motion.button>
         ))}
       </div>
-
-      {/* Messages + Suggestions */}
       <div style={styles.content} ref={msgRef}>
         {messages.length === 0 && suggestions.length === 0 && (
-          <div style={styles.empty}>
-            <div style={{ fontSize: '2em', marginBottom: 8 }}>💬</div>
-            <div style={{ fontSize: '0.82em', color: 'var(--text-secondary)', marginBottom: 4 }}>告诉我你的创作想法</div>
-            <div style={{ fontSize: '0.7em', color: '#aaa' }}>例如："帮我构思第3章的开场"</div>
-          </div>
+          <div style={styles.empty}><div style={{ fontSize: '2em', marginBottom: 8 }}>💬</div><div style={{ fontSize: '0.82em', color: 'var(--text-secondary)', marginBottom: 4 }}>我能读到你的章节和人物</div><div style={{ fontSize: '0.7em', color: '#aaa' }}>试试："把第1章改得更有悬念"</div></div>
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ ...styles.msg, alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? 'var(--accent-hover)' : 'var(--bg-primary)', color: m.role === 'user' ? 'var(--accent)' : 'var(--text-primary)' }}>
-            {m.content.length > 300 ? m.content.slice(0, 300) + '...' : m.content}
+            <div style={{ whiteSpace: 'pre-wrap' }}>{m.content.length > 400 ? m.content.slice(0, 400) + '...' : m.content}</div>
+            {m.role === 'assistant' && m.content.length > 80 && chapterNums.length > 0 && (
+              <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {chapterNums.map(num => (
+                  <motion.button key={num} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                    onClick={() => saveToChapter(parseInt(num), m.content)} style={styles.saveBtn}>💾 保存到第{num}章</motion.button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         {suggestions.map((s, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} style={styles.card}>
-            <div style={styles.cardTitle}>{s.title}</div>
-            <div style={styles.cardDesc}>{s.desc}</div>
+            <div style={styles.cardTitle}>{s.title}</div><div style={styles.cardDesc}>{s.desc}</div>
             <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => insertToCanvas(s)} style={styles.insertBtn}>+ 插入画布</motion.button>
           </motion.div>
         ))}
-        {loading && <div style={{ textAlign: 'center', color: '#aaa', fontSize: '0.8em', padding: 12 }}>✨ AI思考中...</div>}
+        {loading && <div style={{ textAlign: 'center', color: '#aaa', fontSize: '0.8em', padding: 12 }}>✨ AI正在分析你的小说...</div>}
       </div>
-
-      {/* Chat input */}
       <div style={styles.chatArea}>
-        <input value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } }}
-          placeholder="输入创作想法..." style={styles.chatInput} />
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } }}
+          placeholder="告诉AI你想怎么修改..." style={styles.chatInput} />
         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={sendMessage} disabled={loading}
           style={{ ...styles.chatSend, opacity: loading ? 0.5 : 1 }}>发送</motion.button>
       </div>
@@ -157,16 +122,13 @@ export function AIAssistant({ projectId }) {
   );
 }
 
-function parseSuggestions(text, tab) {
+function parseSuggestions(text) {
   const items = [];
   const lines = text.split(/\d+\.\s+/).filter(Boolean);
   for (const line of lines) {
-    const colon = line.indexOf('：') >= 0 ? '：' : line.indexOf(':') >= 0 ? ':' : null;
-    if (colon) {
-      items.push({ title: line.slice(0, colon).trim().slice(0, 30), desc: line.slice(colon + 1).trim().slice(0, 120) });
-    } else if (line.trim().length > 10) {
-      items.push({ title: line.trim().slice(0, 30), desc: line.trim().slice(0, 120) });
-    }
+    const i = line.indexOf('：') >= 0 ? line.indexOf('：') : line.indexOf(':');
+    if (i >= 0) items.push({ title: line.slice(0, i).trim().slice(0, 30), desc: line.slice(i + 1).trim().slice(0, 120) });
+    else if (line.trim().length > 10) items.push({ title: line.trim().slice(0, 30), desc: line.trim().slice(0, 120) });
   }
   return items.slice(0, 5);
 }
@@ -180,7 +142,8 @@ const styles = {
   tab: { display: 'flex', alignItems: 'center', gap: 3, padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s', fontSize: '0.78em' },
   content: { flex: 1, overflow: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 },
   empty: { textAlign: 'center', padding: '40px 0' },
-  msg: { padding: '8px 12px', borderRadius: 10, fontSize: '0.78em', lineHeight: 1.5, maxWidth: '90%' },
+  msg: { padding: '10px 12px', borderRadius: 10, fontSize: '0.78em', lineHeight: 1.5, maxWidth: '92%' },
+  saveBtn: { padding: '3px 8px', borderRadius: 5, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: '0.64em', fontWeight: 600 },
   card: { padding: '12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-primary)' },
   cardTitle: { fontSize: '0.8em', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 },
   cardDesc: { fontSize: '0.73em', color: 'var(--text-secondary)', lineHeight: 1.5 },
