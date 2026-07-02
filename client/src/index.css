@@ -26,6 +26,19 @@
   --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.06), 0 4px 6px -4px rgba(0,0,0,0.04);
 }
 
+body.dark {
+  --bg-primary: #0f0f0f;
+  --bg-card: #1a1a1a;
+  --bg-glass: rgba(30, 30, 30, 0.75);
+  --bg-glass-heavy: rgba(30, 30, 30, 0.9);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.06);
+  --accent: #818CF8;
+  --accent-hover: #1e1b4b;
+  --border: #2a2a2a;
+  --text-primary: #e5e5e5;
+  --text-secondary: #888;
+}
+
 * {
   margin: 0;
   padding: 0;

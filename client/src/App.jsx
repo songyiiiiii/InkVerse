@@ -14,7 +14,10 @@ import { AuthModal } from './components/AuthModal';
 import { api } from './api.js';
 
 export default function App() {
-  const { user, token, login, logout, project, setProject, projects, setProjects, activeView, setActiveView, undo, redo } = useStore();
+  const { user, token, login, logout, project, setProject, projects, setProjects, activeView, setActiveView, undo, redo, theme } = useStore();
+
+  // Init theme
+  useEffect(() => { document.body.className = theme; }, [theme]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [transitioning, setTransitioning] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -170,15 +173,6 @@ export default function App() {
               <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)} />
             )}
           </AnimatePresence>
-
-          {/* VRM 小窗 */}
-          <div style={{
-            position: 'fixed', right: 328, bottom: 20, width: 140, height: 140,
-            zIndex: 500, borderRadius: 20, overflow: 'hidden',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)', background: '#fafafa',
-          }}>
-            <VRMAvatar mode="mini" isThinking={false} isSpeaking={false} height={'140px'} />
-          </div>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../stores/useStore';
+import { VRMAvatar } from './VRMAvatar';
 
 const TABS = [
   { id: 'plot', label: '剧情', icon: '📝' },
@@ -16,6 +17,7 @@ export function AIAssistant({ projectId }) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const { addNode, canvas, project, setProject } = useStore();
   const msgRef = useRef(null);
@@ -78,6 +80,10 @@ export function AIAssistant({ projectId }) {
 
   return (
     <aside style={styles.panel}>
+      {/* VRM 3D Avatar - 2x larger */}
+      <div style={{ height: 320, position: 'relative', overflow: 'hidden', borderBottom: '1px solid var(--border)' }}>
+        <VRMAvatar isThinking={loading} isSpeaking={speaking} height={320} mode="project" />
+      </div>
       <div style={styles.header}><div style={styles.headerTitle}>✨ AI 创作工作台</div><div style={styles.headerSub}>我能读到你的小说 · 可直接修改</div></div>
       <div style={styles.tabs}>
         {TABS.map(tab => (

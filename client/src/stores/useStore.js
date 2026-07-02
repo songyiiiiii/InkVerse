@@ -10,6 +10,15 @@ export const useStore = create((set, get) => ({
   login: (user, token) => { localStorage.setItem('inkverse_user', JSON.stringify(user)); localStorage.setItem('inkverse_token', token); set({ user, token }); },
   logout: () => { localStorage.removeItem('inkverse_user'); localStorage.removeItem('inkverse_token'); set({ user: null, token: null, project: null }); },
 
+  // Theme
+  theme: localStorage.getItem('inkverse_theme') || 'light',
+  toggleTheme: () => {
+    const next = get().theme === 'light' ? 'dark' : 'light';
+    localStorage.setItem('inkverse_theme', next);
+    document.body.className = next;
+    set({ theme: next });
+  },
+
   project: null,
   projects: [],
   activeView: 'canvas',

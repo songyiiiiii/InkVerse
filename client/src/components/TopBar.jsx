@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useStore } from '../stores/useStore';
 
 export function TopBar() {
-  const { activeView, setActiveView, user, logout, setNodeFilter } = useStore();
+  const { activeView, setActiveView, user, logout, setNodeFilter, theme, toggleTheme } = useStore();
 
   const items = [
     { id: 'canvas', icon: '🎨', label: '画布' },
@@ -25,6 +25,9 @@ export function TopBar() {
         ))}
       </div>
       <div style={styles.right}>
+        <button onClick={toggleTheme} style={styles.themeBtn}>
+          {theme === 'light' ? '🌙' : '☀️'}
+        </button>
         {user ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={styles.avatar}>{user.username?.charAt(0).toUpperCase()}</div>
@@ -47,4 +50,5 @@ const styles = {
   right: { display: 'flex', alignItems: 'center', gap: 8 },
   avatar: { width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.75em', fontWeight: 700 },
   logoutBtn: { padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.72em' },
+  themeBtn: { width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.85em', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 };
