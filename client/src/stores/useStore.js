@@ -4,6 +4,12 @@ import { create } from 'zustand';
 const cloneCanvas = (cv) => JSON.parse(JSON.stringify({ nodes: cv.nodes, connections: cv.connections }));
 
 export const useStore = create((set, get) => ({
+  // Auth
+  user: JSON.parse(localStorage.getItem('inkverse_user') || 'null'),
+  token: localStorage.getItem('inkverse_token') || null,
+  login: (user, token) => { localStorage.setItem('inkverse_user', JSON.stringify(user)); localStorage.setItem('inkverse_token', token); set({ user, token }); },
+  logout: () => { localStorage.removeItem('inkverse_user'); localStorage.removeItem('inkverse_token'); set({ user: null, token: null, project: null }); },
+
   project: null,
   projects: [],
   activeView: 'canvas',
