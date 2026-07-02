@@ -35,47 +35,30 @@ export class AgentOrchestrator {
   async process(userInput, context, mode = 'copilot', onStep = null) {
     const steps = [];
 
-    // 检测用户确认 → 跳过意图分析，直接写作
-    const confirmWords = /(开始|好的|写吧|行|ok|yes|可以|go|start|写|快写|生成|继续|嗯|对|是的|okay|sure|please|确认|搞|弄|来吧)/i;
-    const isConfirm = confirmWords.test(userInput.trim());
-    const lastMsg = (context.recentMessages || []).slice(-1)[0];
-    const lastWasApproach = lastMsg?.role === 'assistant' && (
-      (typeof lastMsg?.content === 'string' && lastMsg.content.includes('要开始')) ||
-      (lastMsg?.content?.includes && lastMsg.content.includes('开始'))
-    );
-
-    console.log('[Orchestrator] isConfirm:', isConfirm, 'lastWasApproach:', lastWasApproach, 'userInput:', userInput.trim());
-    console.log('[Orchestrator] lastMsg role:', lastMsg?.role, 'content preview:', typeof lastMsg?.content === 'string' ? lastMsg.content.slice(0, 50) : 'N/A');
-
-    let intent;
-    if (isConfirm && lastWasApproach) {
-      console.log('[Orchestrator] ✅ 确认检测成功，直接进入创作');
-      intent = { type: 'create', subtype: '章节写作', confidence: 1.0, targetChapter: context.currentChapter, keyInfo: '用户确认' };
-      this._emit(onStep, { type: 'intent_done', intent });
-      steps.push({ agent: 'intent', ...intent });
-    } else {
-      // ① 意图理解
-      this._emit(onStep, { type: 'intent_start', message: '正在理解你的意图...' });
-      intent = await this.intentAgent.analyze(userInput, context);
-      this._emit(onStep, { type: 'intent_done', intent });
-      steps.push({ agent: 'intent', ...intent });
-    }
-
-    // 将意图结果注入上下文，供子Agent使用
-    context = { ...context, lastIntent: intent };
+    // ① 意图理解
+    this._emit(onStep, { type: 'intent_start', message: '正在理解你的意图...' });
+    const intent = await this.intentAgent.analyze(userInput, context);
+    this._emit(onStep, { type: 'intent_done', intent });
+    steps.push({ agent: 'intent', ...intent });
 
     let result;
 
     // ② 根据意图分发
     switch (intent.type) {
       case 'create':
-        this._emit(onStep, { type: 'create_start', message: '开始创作...', chapter: intent.targetChapter || context.currentChapter });
+        this._emit(onStep, { type: 'create_start', message: '开始创作...' });
         result = await this.createAgent.execute(userInput, context, mode, onStep);
         break;
 
       case 'revise':
-        this._emit(onStep, { type: 'revise_start', message: '定位修改内容...' });
-        result = await this.reviseAgent.execute(userInput, context, mode, onStep);
+        // Route text/chapter modifications to discuss agent (which has full context)
+        if (intent.subtype === '修改文本' || intent.subtype === '章节写作') {
+          this._emit(onStep, { type: 'discuss_start', message: '正在分析你的小说...' });
+          result = await this.discussAgent.execute(userInput, context, mode, onStep);
+        } else {
+          this._emit(onStep, { type: 'revise_start', message: '定位修改内容...' });
+          result = await this.reviseAgent.execute(userInput, context, mode, onStep);
+        }
         break;
 
       case 'discuss':

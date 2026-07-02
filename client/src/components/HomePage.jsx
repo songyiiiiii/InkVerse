@@ -1,7 +1,8 @@
+import { api } from '../api.js';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export function HomePage({ projects, onCreate, onSelect }) {
+export function HomePage({ projects, onCreate, onSelect, user, onLoginClick, onLogout }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
@@ -15,7 +16,7 @@ export function HomePage({ projects, onCreate, onSelect }) {
     if (!name.trim()) return;
     const existing = projects.find(p => p.name === name.trim());
     if (existing) {
-      fetch(`/api/projects/${existing.id}`).then(r => r.json()).then(onSelect);
+      api.get(`/api/projects/${existing.id}`).then(onSelect);
     } else {
       onCreate(name, { genre, totalChapters: 65, synopsis });
     }
@@ -29,7 +30,7 @@ export function HomePage({ projects, onCreate, onSelect }) {
   const loadOrCreate = (projectName, config) => {
     const existing = projects.find(p => p.name === projectName);
     if (existing) {
-      fetch(`/api/projects/${existing.id}`).then(r => r.json()).then(onSelect);
+      api.get(`/api/projects/${existing.id}`).then(onSelect);
     } else {
       onCreate(projectName, config);
     }
@@ -53,7 +54,7 @@ export function HomePage({ projects, onCreate, onSelect }) {
   ];
 
   const handleExport = async (project) => {
-    const res = await fetch(`/api/projects/${project.id}/export`);
+    const res = await api.getRaw(`/api/projects/${project.id}/export`);
     if (res.ok) {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -75,6 +76,18 @@ export function HomePage({ projects, onCreate, onSelect }) {
           <div style={styles.logo}>✧</div>
           <h1 style={styles.title}>InkVerse</h1>
           <p style={styles.slogan}>Where Stories Become Universes.</p>
+          <div style={{ marginTop: 16 }}>
+            {user ? (
+              <span style={{ fontSize: '0.9em', color: 'var(--text-secondary)' }}>
+                👋 {user.username} · <button onClick={onLogout} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 'inherit' }}>退出</button>
+              </span>
+            ) : (
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={onLoginClick}
+                style={{ padding: '8px 24px', borderRadius: 10, border: '1px solid var(--accent)', background: 'var(--bg-card)', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600, fontSize: '0.9em' }}>
+                👤 登录 / 注册
+              </motion.button>
+            )}
+          </div>
         </motion.div>
 
         {/* Quick Actions */}
@@ -172,13 +185,13 @@ export function HomePage({ projects, onCreate, onSelect }) {
             <div style={styles.grid}>
               {filteredProjects.map(p => (
                 <motion.div key={p.id} whileHover={{ scale: 1.02 }} style={styles.projectCard}>
-                  <div onClick={() => { fetch(`/api/projects/${p.id}`).then(r => r.json()).then(onSelect); }} style={{ cursor: 'pointer', flex: 1 }}>
+                  <div onClick={() => { api.get(`/api/projects/${p.id}`).then(onSelect); }} style={{ cursor: 'pointer', flex: 1 }}>
                     <div style={styles.projectName}>{p.name}</div>
                     <div style={styles.projectMeta}>第{p.currentChapter}章 · {p.config?.genre || ''} · {new Date(p.createdAt).toLocaleDateString()}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button onClick={(e) => { e.stopPropagation(); handleExport(p); }} style={styles.actionBtn} title="导出">📥</button>
-                    <button onClick={(e) => { e.stopPropagation(); if (confirm('确定删除？')) { fetch(`/api/projects/${p.id}`, { method: 'DELETE' }).then(() => window.location.reload()); } }} style={styles.dangerBtn} title="删除">🗑</button>
+                    <button onClick={(e) => { e.stopPropagation(); if (confirm('确定删除？')) { api.del(`/api/projects/${p.id}`).then(() => window.location.reload()); } }} style={styles.dangerBtn} title="删除">🗑</button>
                   </div>
                 </motion.div>
               ))}
