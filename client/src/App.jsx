@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from './stores/useStore';
-import { Navbar } from './components/Navbar';
+import { BoardSidebar } from './components/BoardSidebar';
+import { TopBar } from './components/TopBar';
 import { Canvas } from './components/Canvas';
 import { AIAssistant } from './components/AIAssistant';
 import { NodeDetail } from './components/NodeDetail';
@@ -152,7 +153,10 @@ export default function App() {
       {/* 项目页（转场中隐藏） */}
       {!isHome && !transitioning && (
         <div style={styles.layout}>
-          <Navbar />
+          <BoardSidebar />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <TopBar />
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden', paddingTop: 56 }}>
           {activeView === 'editor' ? (
             <ChapterEditor />
           ) : (
@@ -166,6 +170,17 @@ export default function App() {
               <NodeDetail node={selectedNode} onClose={() => setSelectedNode(null)} />
             )}
           </AnimatePresence>
+
+          {/* VRM 小窗 */}
+          <div style={{
+            position: 'fixed', right: 328, bottom: 20, width: 140, height: 140,
+            zIndex: 500, borderRadius: 20, overflow: 'hidden',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.1)', background: '#fafafa',
+          }}>
+            <VRMAvatar mode="mini" isThinking={false} isSpeaking={false} height={'140px'} />
+          </div>
+            </div>
+          </div>
         </div>
       )}
 
