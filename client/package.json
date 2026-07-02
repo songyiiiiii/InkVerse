@@ -9,9 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "^3.5.4",
+    "@pixiv/three-vrm-animation": "^3.5.4",
     "framer-motion": "^12.42.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "three": "^0.176.0",
+    "vrm-mixamo-retarget": "^1.0.3",
     "zustand": "^4.4.0"
   },
   "devDependencies": {

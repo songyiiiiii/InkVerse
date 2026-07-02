@@ -124,15 +124,29 @@ export class ProjectManager {
     const project = this.getProject(projectId);
     if (!project) return;
 
-    // 处理不同类型的action
     for (const action of actions) {
       if (action.type === 'chapter_generated') {
         project.chapters[action.chapter] = project.chapters[action.chapter] || {};
         project.chapters[action.chapter].content = action.content;
-        project.currentChapter = action.chapter + 1;
+        project.currentChapter = Math.max(project.currentChapter, action.chapter + 1);
       }
       if (action.type === 'character_updated') {
         this.updateCharacter(projectId, action.data);
+      }
+      if (action.type === 'outline_updated') {
+        project.outline = { ...project.outline, ...action.data };
+      }
+      if (action.type === 'location_created' && action.data?.name) {
+        project.locations = project.locations || [];
+        if (!project.locations.find(l => l.name === action.data.name)) {
+          project.locations.push(action.data);
+        }
+      }
+      if (action.type === 'event_created' && action.data?.name) {
+        project.events = project.events || [];
+        if (!project.events.find(e => e.name === action.data.name)) {
+          project.events.push(action.data);
+        }
       }
     }
 

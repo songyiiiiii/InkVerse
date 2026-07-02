@@ -4,12 +4,6 @@ import { create } from 'zustand';
 const cloneCanvas = (cv) => JSON.parse(JSON.stringify({ nodes: cv.nodes, connections: cv.connections }));
 
 export const useStore = create((set, get) => ({
-  // Auth
-  user: JSON.parse(localStorage.getItem('inkverse_user') || 'null'),
-  token: localStorage.getItem('inkverse_token') || null,
-  login: (user, token) => { localStorage.setItem('inkverse_user', JSON.stringify(user)); localStorage.setItem('inkverse_token', token); set({ user, token }); },
-  logout: () => { localStorage.removeItem('inkverse_user'); localStorage.removeItem('inkverse_token'); set({ user: null, token: null, project: null }); },
-
   project: null,
   projects: [],
   activeView: 'canvas',
@@ -17,6 +11,12 @@ export const useStore = create((set, get) => ({
   mode: 'copilot',
   isGenerating: false,
   thinkingSteps: [],
+
+  // ─── AI 写作联动 ─────────────────
+  aiStreaming: false,          // AI 正在流式写正文
+  aiStreamingChapter: null,    // 当前正在写的章节号
+  aiStreamingContent: '',      // 流式内容缓冲
+  aiLastGeneratedChapter: null,// 最后生成的章节号（触发编辑器保存）
 
   // ─── Undo history ─────────────────
 
@@ -61,49 +61,11 @@ export const useStore = create((set, get) => ({
   currentCanvas: 'main',
   subCanvasChapter: null,
 
-  // Main canvas — overview: chapter nodes + character web + key events
+  // Main canvas — starts empty, AI fills it
   canvas: {
     x: 0, y: 0, scale: 0.75,
-    nodes: [
-      // ── Chapter timeline (top row) ──
-      { id: 'ch1', type: 'chapter', x: 80, y: 40, title: '第1章·第四年', subtitle: '图书馆·裂缝·录音·邀请', meta: '3200字 ✓', status: 'done', chapterNum: 1 },
-      { id: 'ch2', type: 'chapter', x: 340, y: 40, title: '第2章·裂缝', subtitle: '三天等待·异常加剧·推门', meta: '3200字 ✓', status: 'done', chapterNum: 2 },
-      { id: 'ch3', type: 'chapter', x: 600, y: 40, title: '第3章·白色大厅', subtitle: '重逢·两声认出彼此', meta: '待创作', status: 'pending', chapterNum: 3 },
-      { id: 'ch4', type: 'chapter', x: 860, y: 40, title: '第4章·规则与重逢', subtitle: '系统规则·第一段对话', meta: '待创作', status: 'pending', chapterNum: 4 },
-      { id: 'ch5', type: 'chapter', x: 1120, y: 40, title: '第5章·第一扇门', subtitle: '副本①教学楼开启', meta: '待创作', status: 'pending', chapterNum: 5 },
-
-      // ── Key events (middle row, connecting chapters) ──
-      { id: 'ev1', type: 'event', x: 180, y: 280, title: '4分37秒', subtitle: '那通电话。统计题底下的求救。', meta: 'Ch1-Ch2 核心悬念', status: 'active' },
-      { id: 'ev2', type: 'event', x: 460, y: 280, title: '白色大厅邀请', subtitle: '论文草稿上的黑体字。三天后。', meta: 'Ch1→Ch3 过渡', status: 'active' },
-      { id: 'ev3', type: 'event', x: 760, y: 280, title: '重逢·声音', subtitle: '笔转动的声音 + 擦眼镜的手', meta: 'Ch3 情感核心', status: 'pending' },
-
-      // ── Characters (bottom row) ──
-      { id: 'c1', type: 'character', x: 80, y: 520, title: '宋见微', subtitle: '心理学研究生·见微知著·感知与众不同', meta: '关联：陆砚·周砚秋·赵老六', status: 'active', avatar: '宋' },
-      { id: 'c2', type: 'character', x: 320, y: 520, title: '陆砚', subtitle: '刑警·34岁·黑框眼镜·禁欲高智', meta: '关联：宋见微·师父女儿', status: 'active', avatar: '陆' },
-      { id: 'c3', type: 'character', x: 560, y: 520, title: '周砚秋', subtitle: '化学系研三·跳楼身亡·已故', meta: '关联：宋见微·副本①原型', status: 'active', avatar: '周' },
-      { id: 'c4', type: 'character', x: 800, y: 520, title: '师父的女儿', subtitle: '失踪时19岁·拨出最后一通电话', meta: '关联：陆砚·宋见微', status: 'active', avatar: '她' },
-
-      // ── Locations ──
-      { id: 'l1', type: 'location', x: 200, y: 720, title: 'S大教学楼', subtitle: '副本①场景·13层空置三年', meta: '个人之罪·Ch5-12', status: 'active' },
-      { id: 'l2', type: 'location', x: 500, y: 720, title: '白色大厅', subtitle: '系统中转空间·纯白·无限走廊', meta: 'Ch3首次出现', status: 'active' },
-    ],
-    connections: [
-      // Chapter timeline
-      { from: 'ch1', to: 'ch2' }, { from: 'ch2', to: 'ch3' }, { from: 'ch3', to: 'ch4' }, { from: 'ch4', to: 'ch5' },
-      // Events → chapters
-      { from: 'ev1', to: 'ch1' }, { from: 'ev1', to: 'ch2' },
-      { from: 'ev2', to: 'ch1' }, { from: 'ev2', to: 'ch3' },
-      { from: 'ev3', to: 'ch3' },
-      // Characters
-      { from: 'c1', to: 'c2' }, { from: 'c1', to: 'c3' }, { from: 'c1', to: 'c4' },
-      { from: 'c2', to: 'c4' },
-      // Characters → events
-      { from: 'c1', to: 'ev1' }, { from: 'c4', to: 'ev1' },
-      { from: 'c1', to: 'ev3' }, { from: 'c2', to: 'ev3' },
-      // Locations
-      { from: 'l1', to: 'c3' }, { from: 'l1', to: 'ch5' },
-      { from: 'l2', to: 'ch3' },
-    ],
+    nodes: [],
+    connections: [],
   },
 
   // Chapter sub-canvases (populated on demand)
@@ -275,4 +237,11 @@ export const useStore = create((set, get) => ({
     thinkingSteps: [...state.thinkingSteps, step]
   })),
   clearThinkingSteps: () => set({ thinkingSteps: [] }),
+
+  // AI 写作联动 actions
+  setAiStreaming: (streaming) => set({ aiStreaming: streaming }),
+  setAiStreamingChapter: (ch) => set({ aiStreamingChapter: ch }),
+  appendAiContent: (chunk) => set(state => ({ aiStreamingContent: state.aiStreamingContent + chunk })),
+  clearAiContent: () => set({ aiStreamingContent: '' }),
+  triggerChapterSave: (chapterNum) => set({ aiLastGeneratedChapter: chapterNum }),
 }));

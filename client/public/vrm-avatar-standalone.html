@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh" style="background:transparent">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDN VRM Test</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:transparent; }
+  canvas { display:block; width:100% !important; height:100% !important; }
+</style>
+</head>
+<body style="background:transparent">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js",
+    "@pixiv/three-vrm-animation": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@3/lib/three-vrm-animation.module.min.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
+
+function log(msg) { console.log(msg); }
+
+const scene = new THREE.Scene();
+// scene.background = transparent (model floats)
+const camera = new THREE.PerspectiveCamera(20, (document.body.clientWidth||200)/(document.body.clientHeight||260), 0.1, 30);
+const urlParams = new URLSearchParams(window.location.search);
+const isHomeMode = urlParams.get('mode') === 'home';
+camera.position.set(0, isHomeMode ? 2.5 : 1.0, 3.5);
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+renderer.setClearColor(0x000000, 0);
+renderer.setSize(document.body.clientWidth || 200, document.body.clientHeight || 260);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight('#ffffff', 2));
+scene.add(new THREE.DirectionalLight('#ffffff', 3).position.set(1,2.5,2.5));
+
+let vrm, mixer, currentAction, currentAnim = null;
+let idleTimer = null;
+const clips = {};
+let vrmVisible = false;
+const ANIMS = [
+  { name: 'greeting', url: '/VRMA_02.vrma' },   // 打招呼
+  { name: 'idle1', url: '/VRMA_06.vrma' },       // 模特pose
+  { name: 'idle2', url: '/VRMA_01.vrma' },       // 全身显示
+  { name: 'thinking', url: '/Thinking.vrma' },   // 思考
+  { name: 'speaking', url: '/Blush.vrma' },      // 说话-脸红
+  { name: 'interact1', url: '/VRMA_03.vrma' },   // 比耶
+  { name: 'interact2', url: '/VRMA_04.vrma' },   // 射击
+  { name: 'rotate', url: '/VRMA_05.vrma' },      // 旋转
+  { name: 'clapping', url: '/Clapping.vrma' },   // 鼓掌
+];
+
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+loader.register(p => new VRMAnimationLoaderPlugin(p));
+
+// Load VRM (same as vrm-viewer)
+log('Loading VRM...');
+loader.load('/tvhead.vrm',
+  (gltf) => {
+    vrm = gltf.userData.vrm;
+    VRMUtils.removeUnnecessaryVertices(gltf.scene);
+    VRMUtils.combineSkeletons(gltf.scene);
+    VRMUtils.combineMorphs(vrm);
+    vrm.scene.traverse(o => o.frustumCulled = false);
+    scene.add(vrm.scene);
+    VRMUtils.rotateVRM0(vrm);
+    vrm.scene.rotation.y = Math.PI;
+    vrm.scene.position.set(0, -0.35, 0);
+    const params = new URLSearchParams(window.location.search);
+    const isHome = params.get('mode') === 'home';
+    vrm.scene.scale.setScalar(isHome ? 1.25 : 0.55);
+    vrm.scene.visible = false;
+    mixer = new THREE.AnimationMixer(vrm.scene);
+    log('VRM OK');
+
+    // Load all VRMA animations
+    let animsLoaded = 0;
+    for (const a of ANIMS) {
+      log('Loading ' + a.name + '...');
+      loader.load(a.url,
+        (g) => {
+          animsLoaded++;
+          const d = g.userData.vrmAnimations?.[0];
+          if (d) {
+            const c = createVRMAnimationClip(d, vrm);
+            if (c) { clips[a.name] = c; log('  ' + a.name + ' OK ' + c.tracks.length + 't'); }
+            else { log('  ' + a.name + ' clip null'); }
+          } else { log('  ' + a.name + ' no data'); }
+          if (animsLoaded >= ANIMS.length) {
+            log(Object.keys(clips).length + '/' + ANIMS.length + ' anims loaded');
+            // 根据 URL 参数决定初始行为
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('mode') === 'home') {
+              vrm.scene.visible = true;
+              startIdleCycle();
+            } else if (params.get('mode') === 'transition') {
+              vrm.scene.visible = true;
+              playLoop('clapping'); // 转场鼓掌
+            } else {
+              // 项目页：打招呼一次，立即切换
+              vrm.scene.visible = true;
+              if (currentAction) currentAction.stop();
+              const action = mixer.clipAction(clips.greeting);
+              action.reset().setLoop(THREE.LoopOnce, 1);
+              action.clampWhenFinished = true;
+              action.play();
+              currentAction = action;
+              const check = setInterval(() => {
+                if (action.paused || !action.isRunning()) {
+                  clearInterval(check);
+                  startIdleCycle();
+                }
+              }, 100);
+            }
+          }
+        },
+        (p) => { if(p.total && a.name==='idle') log(a.name + ' ' + Math.round(p.loaded/p.total*100) + '%'); },
+        (err) => { animsLoaded++; log(a.name + ' err: ' + err.message); }
+      );
+    }
+  },
+  (p) => { if(p.total) log('VRM ' + Math.round(p.loaded/p.total*100) + '%'); },
+  (err) => { log('VRM err: ' + err.message); }
+);
+
+function smoothSwitch(clip, loop) {
+  const newAction = mixer.clipAction(clip);
+  newAction.reset().setLoop(loop, loop === THREE.LoopOnce ? 1 : Infinity);
+  newAction.clampWhenFinished = true;
+  newAction.setEffectiveWeight(0);
+  newAction.play();
+
+  const oldAction = currentAction;
+  if (oldAction) {
+    // 手动混合：旧动画权重 1→0, 新动画权重 0→1
+    const startTime = performance.now();
+    const duration = 300; // ms
+    const tick = () => {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      if (oldAction && oldAction.isRunning()) oldAction.setEffectiveWeight(1 - t);
+      newAction.setEffectiveWeight(t);
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        if (oldAction) { oldAction.stop(); oldAction.setEffectiveWeight(1); }
+        newAction.setEffectiveWeight(1);
+      }
+    };
+    requestAnimationFrame(tick);
+  } else {
+    newAction.setEffectiveWeight(1);
+  }
+
+  currentAction = newAction;
+  currentAnim = clip.name || currentAnim;
+  return newAction;
+}
+
+function playLoop(name) {
+  if (!mixer || !clips[name] || currentAnim === name) return;
+  stopIdleCycle();
+  smoothSwitch(clips[name], THREE.LoopRepeat);
+  currentAnim = name;
+}
+
+function playOneShot(name, onDone) {
+  if (!mixer || !clips[name]) return;
+  stopIdleCycle();
+  const action = smoothSwitch(clips[name], THREE.LoopOnce);
+  currentAnim = name;
+  const check = setInterval(() => {
+    if (action.paused || !action.isRunning()) {
+      clearInterval(check);
+      if (onDone) onDone();
+    }
+  }, 100);
+}
+
+function startIdleCycle() {
+  stopIdleCycle();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('mode') === 'home') {
+    playLoop('idle1');
+  } else {
+    const pick = () => {
+      const n = Math.random() < 0.5 ? 'idle1' : 'idle2';
+      if (currentAnim !== n) playLoop(n);
+    };
+    pick();
+    idleTimer = setInterval(() => {
+      if (currentAnim === 'idle1' || currentAnim === 'idle2') pick();
+    }, 8000);
+  }
+}
+
+function stopIdleCycle() {
+  if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
+  currentAnim = null; // 让 idle 能重新触发
+}
+
+// 互动
+function interact() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('mode') === 'home') {
+    // 首页：旋转一次
+    playOneShot('rotate', () => startIdleCycle());
+  } else {
+    // 项目页：比耶或射击
+    const n = Math.random() < 0.5 ? 'interact1' : 'interact2';
+    playOneShot(n, () => startIdleCycle());
+  }
+}
+
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'setState') {
+    if (e.data.isSpeaking) playLoop('speaking');
+    else if (e.data.isThinking) playLoop('thinking');
+    else if (currentAnim === 'thinking' || currentAnim === 'speaking') startIdleCycle();
+  }
+});
+
+// ── Mouse interaction ──
+let isDragging = false, prevX = 0, prevY = 0;
+let targetRotY = 0, currentRotY = 0;
+let targetZoom = 3.5, currentZoom = 3.5;
+
+const canvas = renderer.domElement;
+canvas.style.cursor = 'grab';
+
+let clickStartX = 0, clickStartY = 0;
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true; prevX = e.clientX; prevY = e.clientY;
+  clickStartX = e.clientX; clickStartY = e.clientY;
+  canvas.style.cursor = 'grabbing';
+});
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  targetRotY += (e.clientX - prevX) * 0.01;
+  prevX = e.clientX; prevY = e.clientY;
+});
+window.addEventListener('mouseup', (e) => {
+  const dx = e.clientX - clickStartX;
+  const dy = e.clientY - clickStartY;
+  // 移动 < 5px 视为点击
+  if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+    interact();
+  }
+  isDragging = false;
+  canvas.style.cursor = 'grab';
+});
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  targetZoom += e.deltaY * 0.005;
+  targetZoom = Math.max(2.0, Math.min(6.0, targetZoom));
+}, { passive: false });
+
+// Resize for iframe
+new ResizeObserver(() => {
+  const w = document.body.clientWidth, h = document.body.clientHeight;
+  if (w > 0 && h > 0) { renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+}).observe(document.body);
+
+// Loop
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  currentRotY += (targetRotY - currentRotY) * 0.1;
+  currentZoom += (targetZoom - currentZoom) * 0.1;
+  camera.position.set(Math.sin(currentRotY) * currentZoom, isHomeMode ? 2.5 : 1.0, Math.cos(currentRotY) * currentZoom);
+  camera.lookAt(0, isHomeMode ? 1.6 : 0.2, 0);
+
+  if (vrm) vrm.update(dt);
+  if (mixer) mixer.update(dt);
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

@@ -45,14 +45,28 @@ export class UserManager {
     return u ? { username: u.username, email: u.email, createdAt: u.createdAt, projects: u.projects || [] } : null;
   }
 
+  _ensureUser(username) {
+    const users = this._read();
+    if (!users[username]) {
+      users[username] = { username, password: '', email: '', createdAt: new Date().toISOString(), projects: [] };
+      this._write(users);
+    }
+    return username;
+  }
+
   addProject(username, projectId) {
+    this._ensureUser(username);
     const users = this._read();
     if (users[username]) { users[username].projects = [...(users[username].projects || []), projectId]; this._write(users); }
   }
 
-  getUserProjects(username) { return this.getUser(username)?.projects || []; }
+  getUserProjects(username) {
+    this._ensureUser(username);
+    return this.getUser(username)?.projects || [];
+  }
 
   removeProject(username, projectId) {
+    this._ensureUser(username);
     const users = this._read();
     if (users[username]) { users[username].projects = (users[username].projects || []).filter(id => id !== projectId); this._write(users); }
   }

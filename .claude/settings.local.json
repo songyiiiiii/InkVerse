@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cmdkey /delete:git:https://github.com 2>$null)",
+      "PowerShell(git remote remove origin)",
+      "PowerShell(git remote add origin https://github.com/songyiiiiii/InkVerse.git)",
+      "PowerShell(git push -u origin master:lv)"
+    ]
+  }
+}

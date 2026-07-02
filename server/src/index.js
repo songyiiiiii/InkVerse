@@ -117,11 +117,12 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 
 // ─── REST API ───────────────────────────────────
 
-// 项目列表（未登录返回空列表）
+// 项目列表（游客可查看所有项目）
 app.get('/api/projects', optionalAuth, (req, res) => {
   if (!req.username) return res.json([]);
-  const userProjects = users.getUserProjects(req.username);
   const allProjects = projects.listProjects();
+  if (req.username === 'guest') return res.json(allProjects);
+  const userProjects = users.getUserProjects(req.username);
   res.json(allProjects.filter(p => userProjects.includes(p.id)));
 });
 
@@ -129,24 +130,29 @@ app.get('/api/projects', optionalAuth, (req, res) => {
 app.post('/api/projects', authMiddleware, (req, res) => {
   const { name, config } = req.body;
   const project = projects.createProject(name, config);
-  
-  // 关联项目到用户
+
+  // 关联项目到用户（游客也关联）
   users.addProject(req.username, project.id);
-  
+
   res.json(project);
 });
+
+// 检查项目访问权限的辅助函数
+function _checkAccess(username, projectId) {
+  if (username === 'guest') return true;
+  const userProjects = users.getUserProjects(username);
+  return userProjects.includes(projectId);
+}
 
 // 获取项目详情（验证用户是否有权限）
 app.get('/api/projects/:id', authMiddleware, (req, res) => {
   const project = projects.getProject(req.params.id);
   if (!project) return res.status(404).json({ error: '项目不存在' });
-  
-  // 验证用户是否有权限访问此项目
-  const userProjects = users.getUserProjects(req.username);
-  if (!userProjects.includes(req.params.id)) {
+
+  if (!_checkAccess(req.username, req.params.id)) {
     return res.status(403).json({ error: '无权访问此项目' });
   }
-  
+
   res.json(project);
 });
 
@@ -154,12 +160,11 @@ app.get('/api/projects/:id', authMiddleware, (req, res) => {
 app.get('/api/projects/:id/chapters/:num', authMiddleware, (req, res) => {
   const project = projects.getProject(req.params.id);
   if (!project) return res.status(404).json({ error: '项目不存在' });
-  
-  const userProjects = users.getUserProjects(req.username);
-  if (!userProjects.includes(req.params.id)) {
+
+  if (!_checkAccess(req.username, req.params.id)) {
     return res.status(403).json({ error: '无权访问此项目' });
   }
-  
+
   const chapter = project?.chapters?.[req.params.num];
   if (!chapter) return res.status(404).json({ error: '章节不存在' });
   res.json(chapter);
@@ -168,12 +173,11 @@ app.get('/api/projects/:id/chapters/:num', authMiddleware, (req, res) => {
 // 保存章节内容
 app.put('/api/projects/:id/chapters/:num', authMiddleware, (req, res) => {
   const { content } = req.body;
-  
-  const userProjects = users.getUserProjects(req.username);
-  if (!userProjects.includes(req.params.id)) {
+
+  if (!_checkAccess(req.username, req.params.id)) {
     return res.status(403).json({ error: '无权访问此项目' });
   }
-  
+
   const project = projects.saveChapter(req.params.id, parseInt(req.params.num), content);
   if (!project) return res.status(404).json({ error: '项目不存在' });
   res.json({ success: true, chapter: project.chapters[req.params.num] });
@@ -183,9 +187,8 @@ app.put('/api/projects/:id/chapters/:num', authMiddleware, (req, res) => {
 app.get('/api/projects/:id/export', authMiddleware, (req, res) => {
   const project = projects.getProject(req.params.id);
   if (!project) return res.status(404).json({ error: '项目不存在' });
-  
-  const userProjects = users.getUserProjects(req.username);
-  if (!userProjects.includes(req.params.id)) {
+
+  if (!_checkAccess(req.username, req.params.id)) {
     return res.status(403).json({ error: '无权访问此项目' });
   }
 
@@ -209,17 +212,16 @@ app.get('/api/projects/:id/export', authMiddleware, (req, res) => {
 });
 
 app.delete('/api/projects/:id', authMiddleware, (req, res) => {
-  const userProjects = users.getUserProjects(req.username);
-  if (!userProjects.includes(req.params.id)) {
+  if (!_checkAccess(req.username, req.params.id)) {
     return res.status(403).json({ error: '无权访问此项目' });
   }
-  
+
   const success = projects.deleteProject(req.params.id);
   if (!success) return res.status(404).json({ error: '项目不存在' });
-  
+
   // 从用户中移除项目关联
   users.removeProject(req.username, req.params.id);
-  
+
   res.json({ success: true });
 });
 
@@ -231,9 +233,8 @@ app.post('/api/projects/:id/chat', authMiddleware, async (req, res) => {
   const project = projects.getProject(projectId);
 
   if (!project) return res.status(404).json({ error: '项目不存在' });
-  
-  const userProjects = users.getUserProjects(req.username);
-  if (!userProjects.includes(projectId)) {
+
+  if (!_checkAccess(req.username, projectId)) {
     return res.status(403).json({ error: '无权访问此项目' });
   }
 
@@ -249,26 +250,20 @@ app.post('/api/projects/:id/chat', authMiddleware, async (req, res) => {
   };
 
   try {
-    // 获取章节内容详情供AI分析
-    const chapterNums = Object.keys(project.chapters || {});
-    const chapterSummaries = chapterNums.map(n => ({
-      num: n,
-      wordCount: (project.chapters[n]?.content || '').length,
-      preview: (project.chapters[n]?.content || '').slice(0, 500),
-    }));
-
-    // 构建上下文（合并前端传来的额外上下文）
+    // 更新上下文
     const context = {
       projectId,
+      projectName: project.name,
+      genre: project.config?.genre || '',
+      synopsis: project.config?.synopsis || '',
+      totalChapters: project.config?.totalChapters || 65,
       mode: mode || project.mode || 'copilot',
       currentChapter: project.currentChapter,
       outline: project.outline,
-      characters: project.characters.map(c => `${c.name}(${c.role})`).join(', '),
-      chapters: chapterSummaries,
+      characters: (project.characters || []).map(c => `${c.name}(${c.role || ''})`).join(', '),
       lastChapterEnding: project.context?.lastChapterEnding || '',
       recentMessages: project.context?.recentMessages || [],
-      preferredPOV: project.config?.preferredPOV || '宋见微',
-      frontendContext: req.body.context || {},
+      preferredPOV: project.config?.preferredPOV || '',
     };
 
     // 执行Agent链路
@@ -295,9 +290,8 @@ app.post('/api/projects/:id/chat', authMiddleware, async (req, res) => {
 app.patch('/api/projects/:id/mode', authMiddleware, (req, res) => {
   const project = projects.getProject(req.params.id);
   if (!project) return res.status(404).json({ error: '项目不存在' });
-  
-  const userProjects = users.getUserProjects(req.username);
-  if (!userProjects.includes(req.params.id)) {
+
+  if (!_checkAccess(req.username, req.params.id)) {
     return res.status(403).json({ error: '无权访问此项目' });
   }
 
